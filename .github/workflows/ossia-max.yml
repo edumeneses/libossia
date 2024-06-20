@@ -4,69 +4,27 @@ on: push
 
 jobs:
   build-macos:
-    runs-on: macos-13
+    runs-on: macos-14
     environment: 'Apple Certificate'
     steps:
     - uses: actions/checkout@v4
     - uses: ./.github/actions/latest-mac-toolchain
     - name: build
       run: ./tools/build-ossia-max.sh clean silent release
-    - name: Code Signing
-      shell: bash
-      env:
+
+    - uses: ./.github/actions/mac-codesign
+      with:
+        path-to-sign: "artifacts/ossia"
+        output-name: "ossia-max-macos.zip"
         MAC_CERT_B64: ${{ secrets.MAC_CERT_B64 }}
         MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
         MAC_ALTOOL_PASSWORD: ${{ secrets.MAC_ALTOOL_PASSWORD }}
-      run: |
-        # Setup codesigning
-        # Thanks https://www.update.rocks/blog/osx-signing-with-travis/
-        (
-          set +x
-          KEY_CHAIN=build.keychain
-          echo "$MAC_CERT_B64" | base64 --decode > ossia-cert.p12
-
-          security create-keychain -p azure $KEY_CHAIN
-          security default-keychain -s $KEY_CHAIN
-          security unlock-keychain -p azure $KEY_CHAIN
-          security import ossia-cert.p12 -k $KEY_CHAIN -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign;
-          security set-key-partition-list -S apple-tool:,apple: -s -k azure $KEY_CHAIN
-
-          rm -rf *.p12
-        )
-
-        security unlock-keychain -p azure build.keychain
-
-        echo "Checking codesigning"
-        find . -name libossia-max.dylib
-        (
-          cd artifacts
-          echo "===== Content of artifacts"
-          ls
-          echo "===== Content of artifacts/ossia/support"
-          ls ossia/support
-          echo "===== Content of artifacts/ossia/externals"
-          ls ossia/externals
-
-          codesign --force --timestamp --sign "ossia.io" ossia/support/libossia-max.dylib
-          for mxo in ossia/externals/*.mxo;
-          do 
-            codesign --force --timestamp --sign "ossia.io" $mxo
-          done
-          
-          ditto -c -k --sequesterRsrc --keepParent ossia ossia-max.zip
-          xcrun altool \
-                --notarize-app \
-                -t osx \
-                -f "ossia-max.zip" \
-                --primary-bundle-id "io.ossia.ossia-max" \
-                -u jeanmichael.celerier@gmail.com -p "@env:MAC_ALTOOL_PASSWORD"
-          rm ossia-max.zip
-        )
     - name: Archive Max Package
       uses: actions/upload-artifact@v2
       with:
         name: ossia-max
         path: artifacts/ossia
+
     - name: Upload logs
       if: ${{ always() }}
       uses: actions/upload-artifact@v2
@@ -81,13 +39,10 @@ jobs:
       configuration: Release
     steps:
     - uses: actions/checkout@v4
-    - name: install deps
-      run: choco install -y ninja
+    - uses: ./.github/actions/latest-msvc-toolchain
     - name : build
       shell: cmd
       run: |
-        call ci\msvc.bat
-
         cmake -B build -S %GITHUB_WORKSPACE% -GNinja -DOSSIA_MAX_ONLY=1 -DCMAKE_SYSTEM_VERSION=7 -DOSSIA_CI=1 -DCMAKE_INSTALL_PREFIX=install -DCMAKE_BUILD_TYPE=Release
         cmake --build build
         cmake --install build
@@ -97,6 +52,7 @@ jobs:
       with:
         name: ossia-max
         path: build/install/ossia-max-package/ossia
+
     - name: Upload logs
       if: ${{ always() }}
       uses: actions/upload-artifact@v2

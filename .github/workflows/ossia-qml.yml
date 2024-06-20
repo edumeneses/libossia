@@ -9,14 +9,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Install Build Dependencies
-      run: |
-        sudo apt-get update -qq
-        sudo apt-get install -yqq build-essential gcc g++ ninja-build libavahi-client-dev
+    - uses: ./.github/actions/latest-ubuntu-toolchain
     - name: Build
-      env: 
-        CC: gcc
-        CXX: g++
       run: |
         cmake  -B build -S ${GITHUB_WORKSPACE} -GNinja \
           -DOSSIA_CI=1 \
@@ -33,13 +27,14 @@ jobs:
 
   qml-mac:
     name: QML (macOS)
-    runs-on: macos-13
+    runs-on: macos-14
+    environment: 'Apple Certificate'
     steps:
     - uses: actions/checkout@v4
     - uses: ./.github/actions/latest-mac-toolchain
     - name: Install Dependencies
       run: |
-        brew install ninja qt
+        brew install qt
     - name: Build
       run: |
         cmake -B build -S ${GITHUB_WORKSPACE} -GNinja \
@@ -50,22 +45,21 @@ jobs:
           -DCMAKE_OSX_ARCHITECTURES="x86_64"
         cmake --build build
         cmake --build build --target install 
-    - name: Code Signing
-      shell: bash
-      env:
-        MAC_CERT_B64: ${{ secrets.MAC_CERT_B64 }}
-        MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
-        MAC_ALTOOL_PASSWORD: ${{ secrets.MAC_ALTOOL_PASSWORD }}
-      run: |
-        source ${GITHUB_WORKSPACE}/ci/codesign_functions.sh
-        release_macos_folder "${GITHUB_WORKSPACE}/install/Ossia" "$PWD/ossia-qml-osx.zip" "io.ossia.ossia-qml"
+    # - name: Code Signing
+    #   shell: bash
+    #   env:
+    #     MAC_CERT_B64: ${{ secrets.MAC_CERT_B64 }}
+    #     MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+    #     MAC_ALTOOL_PASSWORD: ${{ secrets.MAC_ALTOOL_PASSWORD }}
+    #   run: |
+    #     source ${GITHUB_WORKSPACE}/ci/codesign_functions.sh
+    #     release_macos_folder "${GITHUB_WORKSPACE}/install/Ossia" "$PWD/ossia-qml-osx.zip" "io.ossia.ossia-qml"
 
     - name: Archive Package
       uses: actions/upload-artifact@v2
       with:
         name: ossia-qml
         path: install
-    environment: 'Apple Certificate'
       
   qml-windows:
     name: QML (Windows)
@@ -73,12 +67,10 @@ jobs:
 
     steps:
     - uses: actions/checkout@v4
-    - name: Install Dependencies
-      run: choco install -y ninja
+    - uses: ./.github/actions/latest-msvc-toolchain
     - name: Build
       shell: cmd
       run: |
-        call ci\msvc.bat
 
         cmake -B build -S %GITHUB_WORKSPACE% -GNinja -DOSSIA_PCH=0 -DOSSIA_CI=1 -DOSSIA_QML_ONLY=1 -DCMAKE_SYSTEM_VERSION=7 -DCMAKE_INSTALL_PREFIX=install -DCMAKE_BUILD_TYPE=Release
         cmake --build build

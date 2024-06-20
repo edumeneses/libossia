@@ -4,7 +4,7 @@ on: push
 
 jobs:
   build-macos:
-    runs-on: macos-13
+    runs-on: macos-14
     environment: 'Apple Certificate'
     steps:
     - uses: actions/checkout@v4
@@ -22,44 +22,14 @@ jobs:
         cmake --build build
         cmake --build build --target install
 
-    - name: Code Signing
-      shell: bash
-      env:
+    - uses: ./.github/actions/mac-codesign
+      with:
+        path-to-sign: "install/ossia-pd-package"
+        output-name: ossia-pd.zip
         MAC_CERT_B64: ${{ secrets.MAC_CERT_B64 }}
         MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
         MAC_ALTOOL_PASSWORD: ${{ secrets.MAC_ALTOOL_PASSWORD }}
-      run: |
-        # Setup codesigning
-        # Thanks https://www.update.rocks/blog/osx-signing-with-travis/
-        (
-          set +x
-          KEY_CHAIN=build.keychain
-          echo "$MAC_CERT_B64" | base64 --decode > ossia-cert.p12
-
-          security create-keychain -p azure $KEY_CHAIN
-          security default-keychain -s $KEY_CHAIN
-          security unlock-keychain -p azure $KEY_CHAIN
-          security import ossia-cert.p12 -k $KEY_CHAIN -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign;
-          security set-key-partition-list -S apple-tool:,apple: -s -k azure $KEY_CHAIN
-
-          rm -rf *.p12
-        )
-
-        security unlock-keychain -p azure build.keychain
-
-        (
-          cd install/ossia-pd-package
-          codesign --force --timestamp --sign "ossia.io" ossia/ossia.d_*
-
-          zip ossia-pd.zip ossia/ossia.d_*
-          xcrun altool \
-                --notarize-app \
-                -t osx \
-                -f "ossia-pd.zip" \
-                --primary-bundle-id "io.ossia.ossia-pd" \
-                -u jeanmichael.celerier@gmail.com -p "@env:MAC_ALTOOL_PASSWORD"
-          rm ossia-pd.zip
-        )
+        
     - name: Archive Package
       uses: actions/upload-artifact@v2
       with:
@@ -70,13 +40,10 @@ jobs:
     runs-on: windows-latest
     steps:
     - uses: actions/checkout@v4
-    - name: install deps
-      run: choco install -y ninja
+    - uses: ./.github/actions/latest-msvc-toolchain
     - name : Build
       shell: cmd
       run: |
-        call ci\msvc.bat
-
         cmake -B build -S %GITHUB_WORKSPACE% -GNinja -DOSSIA_PD_ONLY=1 -DOSSIA_CI=1 -DCMAKE_SYSTEM_VERSION=7 -DCMAKE_INSTALL_PREFIX=install -DCMAKE_BUILD_TYPE=Release
         cmake --build build
         cmake --install build
@@ -91,15 +58,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Install Dependencies
-      run: | 
-        sudo apt-get update -yqq 
-        sudo apt-get upgrade -yqq
-        sudo apt-get install -yqq build-essential gcc-11 g++-11 ninja-build libavahi-client-dev
+    - uses: ./.github/actions/latest-ubuntu-toolchain
     - name: Build
-      env: 
-        CC: gcc-11
-        CXX: g++-11
       run: | 
         cmake -B build -S ${GITHUB_WORKSPACE} -GNinja -DOSSIA_CI=1 -DCMAKE_BUILD_TYPE=Release -DOSSIA_PD_ONLY=1 -DCMAKE_INSTALL_PREFIX=install
         cmake --build build
@@ -118,13 +78,11 @@ jobs:
     - name: Build
       run: |
         export CTEST_OUTPUT_ON_FAILURE=1
-        export RPI_ROOT_PATH=/opt/cross-pi-gcc
-        export PKG_CONFIG_SYSROOT_DIR=$RPI_ROOT_PATH
-        export PKG_CONFIG_LIBDIR=${RPI_ROOT_PATH}/usr/lib/pkgconfig:${RPI_ROOT_PATH}/usr/share/pkgconfig:${RPI_ROOT_PATH}/usr/lib/arm-linux-gnueabihf/pkgconfig/
         export PATH=/opt/cross-pi-gcc/bin:${PATH}
         export LD_LIBRARY_PATH=/opt/cross-pi-gcc/lib:${LD_LIBRARY_PATH}
 
-        cmake -B build -S ${GITHUB_WORKSPACE} -DCMAKE_TOOLCHAIN_FILE="${GITHUB_WORKSPACE}/cmake/toolchain/arm-linux-gnueabihf.cmake" \
+        cmake -B build -S ${GITHUB_WORKSPACE} \
+            -DCMAKE_TOOLCHAIN_FILE="/opt/cross-pi-gcc/aarch64-rpi3-linux-gnu.toolchain.cmake" \
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_INSTALL_PREFIX=install \
             -DOSSIA_CI=1 \

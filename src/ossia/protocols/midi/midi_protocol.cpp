@@ -34,15 +34,6 @@ midi_protocol::midi_protocol(
   m_output = std::make_unique<libremidi::midi_out>(conf, api);
 }
 
-/*
-midi_protocol::midi_protocol(
-    ossia::net::network_context_ptr ctx, midi_info m, libremidi::API api)
-    : midi_protocol{std::move(ctx), m.handle.display_name, api}
-{
-  set_info(m);
-}
-*/
-
 midi_protocol::~midi_protocol()
 {
   if(m_input)
@@ -95,11 +86,13 @@ bool midi_protocol::set_info(midi_info m)
     // Close current ports
     if(m_info.type == midi_info::Type::Input)
     {
-      m_input->close_port();
+      if(m_input)
+        m_input->close_port();
     }
     else if(m_info.type == midi_info::Type::Output)
     {
-      m_output->close_port();
+      if(m_output)
+        m_output->close_port();
     }
 
     m_info = m;

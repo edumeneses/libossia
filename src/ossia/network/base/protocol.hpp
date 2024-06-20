@@ -126,6 +126,22 @@ public:
   virtual bool observe(parameter_base&, bool) = 0;
 
   /**
+   * @brief Notify the network that a parameter is to be published
+   * 
+   * In some protocols (MQTT), this may send a message to the broker to indicate
+   * that a new topic is being made available for publication.
+   */
+  virtual bool publish(const parameter_base&);
+
+  /**
+   * @brief Notify the network that a parameter is to be removed
+   * 
+   * In some protocols (MQTT), this may send a message to the broker to indicate
+   * that a previously published topic is disappearing.
+   */
+  virtual bool unpublish(const parameter_base&);
+
+  /**
    * @brief Begin observation without notifying the other computers.
    */
   virtual bool observe_quietly(parameter_base&, bool) { return false; }
@@ -164,6 +180,11 @@ public:
   virtual void start_execution() { }
   virtual void stop_execution() { }
   virtual void stop() { }
+
+  // By default feedback is enabled. Disabling it means that the protocol
+  // won't send any data, just apply the incoming messages - useful for preventing feedback loops while
+  // loading things
+  virtual void set_feedback(bool feedback);
 
   flags get_flags() const noexcept { return m_flags; }
   bool test_flag(flags f) const noexcept { return m_flags & f; }

@@ -53,6 +53,24 @@ struct http_async_answer
     }
   }
 };
+struct http_async_value_answer
+{
+  std::weak_ptr<oscquery_shared_async_state> state;
+  std::string source_address;
+
+  template <typename T, typename S>
+  void operator()(T& req, const S& str)
+  {
+    if(auto ptr = state.lock())
+    {
+      if(ptr->active)
+      {
+        if(ptr->self.on_value_http_message(source_address, str))
+          req.close();
+      }
+    }
+  }
+};
 
 struct http_async_error
 {
@@ -90,6 +108,8 @@ auto wait_for_future(
 }
 using http_async_request
     = ossia::net::http_get_request<http_async_answer, http_async_error>;
+using http_async_value_request
+    = ossia::net::http_get_request<http_async_value_answer, http_async_error>;
 
 struct http_async_client_context
 {
@@ -116,12 +136,21 @@ oscquery_mirror_asio_protocol::oscquery_mirror_asio_protocol(
 
   // for http, host should be only the name, e.g. example.com instead of
   // http://example.com:1234
+
   if(port_idx != std::string::npos)
     m_httpHost.erase(m_httpHost.begin() + port_idx, m_httpHost.end());
+
+  m_protocol_to_use = any_protocol;
   if(boost::starts_with(m_httpHost, "http://"))
+  {
     m_httpHost.erase(m_httpHost.begin(), m_httpHost.begin() + 7);
+    m_protocol_to_use = http;
+  }
   else if(boost::starts_with(m_httpHost, "ws://"))
+  {
     m_httpHost.erase(m_httpHost.begin(), m_httpHost.begin() + 5);
+    m_protocol_to_use = websockets;
+  }
 }
 
 void oscquery_mirror_asio_protocol::stop()
@@ -224,14 +253,21 @@ std::future<void> oscquery_mirror_asio_protocol::pull_async(net::parameter_base&
 void oscquery_mirror_asio_protocol::request(net::parameter_base& address)
 {
   auto text = address.get_node().osc_address();
+  auto answer = http_async_value_answer{m_async_state, text};
   text += ossia::oscquery::detail::query_value();
-  http_send_message(text);
+
+  auto hrq = std::make_shared<http_async_value_request>(
+      std::move(answer), http_async_error{}, m_ctx->context, m_httpHost, text);
+  hrq->resolve(m_httpHost, m_queryPort);
 }
 
 using proto = ossia::oscquery::oscquery_protocol_client<ossia::net::osc_extended_policy>;
 bool oscquery_mirror_asio_protocol::push(
     const net::parameter_base& addr, const ossia::value& v)
 {
+  if(!m_feedback)
+    return false;
+
   if(addr.get_access() == ossia::access_mode::GET)
     return false;
 
@@ -242,6 +278,9 @@ bool oscquery_mirror_asio_protocol::echo_incoming_message(
     const ossia::net::message_origin_identifier& id,
     const ossia::net::parameter_base& addr, const value& val)
 {
+  if(!m_feedback)
+    return false;
+
   if(&id.protocol == this && id.identifier == (uintptr_t)this->m_websocketClient.get())
     return true;
 
@@ -250,6 +289,9 @@ bool oscquery_mirror_asio_protocol::echo_incoming_message(
 
 bool oscquery_mirror_asio_protocol::push_raw(const net::full_parameter_data& addr)
 {
+  if(!m_feedback)
+    return false;
+
   if(addr.get_access() == ossia::access_mode::GET)
     return false;
 
@@ -259,12 +301,18 @@ bool oscquery_mirror_asio_protocol::push_raw(const net::full_parameter_data& add
 bool oscquery_mirror_asio_protocol::push_bundle(
     const std::vector<const ossia::net::parameter_base*>& addresses)
 {
+  if(!m_feedback)
+    return false;
+
   return proto::push_bundle(*this, addresses);
 }
 
 bool oscquery_mirror_asio_protocol::push_raw_bundle(
     const std::vector<ossia::net::full_parameter_data>& addresses)
 {
+  if(!m_feedback)
+    return false;
+
   return proto::push_bundle(*this, addresses);
 }
 
@@ -412,22 +460,25 @@ void oscquery_mirror_asio_protocol::start_http()
 
 void oscquery_mirror_asio_protocol::start_websockets()
 {
+  if(m_protocol_to_use == http)
+    return;
+
   m_websocketClient = std::make_unique<ossia::net::websocket_client>(
       m_ctx->context, [this](
-                          connection_handler hdl, websocketpp::frame::opcode::value op,
-                          std::string& msg) {
-        switch(op)
-        {
-          case websocketpp::frame::opcode::value::TEXT:
-            this->on_text_ws_message(hdl, msg);
-            break;
-          case websocketpp::frame::opcode::value::BINARY:
-            this->on_binary_ws_message(hdl, msg);
-            break;
-          default:
-            break;
-        }
-      });
+                          const connection_handler& hdl,
+                          websocketpp::frame::opcode::value op, std::string& msg) {
+    switch(op)
+    {
+      case websocketpp::frame::opcode::value::TEXT:
+        this->on_text_ws_message(hdl, msg);
+        break;
+      case websocketpp::frame::opcode::value::BINARY:
+        this->on_binary_ws_message(hdl, msg);
+        break;
+      default:
+        break;
+    }
+  });
   m_id.identifier = (uintptr_t)m_websocketClient.get();
 
   m_websocketClient->on_close
@@ -448,6 +499,11 @@ void oscquery_mirror_asio_protocol::start_websockets()
   catch(...)
   {
     // Websocket does not connect, http requests will be used instead
+
+    m_websocketClient.reset();
+    //     m_websocketClient->on_open.disconnect(this->on_connection_open);
+    //     m_websocketClient->on_close.disconnect(this->on_connection_closed);
+    //     m_websocketClient->on_fail.disconnect(this->on_connection_failure);
   }
 }
 
@@ -460,6 +516,12 @@ void oscquery_mirror_asio_protocol::start_osc()
   m_osc_port = m_oscServer->m_socket.local_endpoint().port();
   m_oscServer->receive(
       [this](const char* data, std::size_t sz) { process_raw_osc_data(data, sz); });
+}
+
+void oscquery_mirror_asio_protocol::set_feedback(bool b)
+{
+
+  m_feedback = b;
 }
 
 void oscquery_mirror_asio_protocol::init()
@@ -651,4 +713,53 @@ bool oscquery_mirror_asio_protocol::on_text_ws_message(
   return true;
 }
 
+bool oscquery_mirror_asio_protocol::on_value_http_message(
+    const std::string& address, const std::string& message)
+{
+  using json_parser = ossia::oscquery::json_parser;
+  using message_type = ossia::oscquery::message_type;
+  using host_info = ossia::oscquery::host_info;
+  try
+  {
+    std::shared_ptr<rapidjson::Document> data = json_parser::parse(message);
+    if(!data->IsObject())
+    {
+      if(m_logger.inbound_logger)
+        m_logger.inbound_logger->warn("Invalid HTTP reply received: {}", message);
+      return false;
+    }
+
+    auto node = ossia::net::find_node(m_device->get_root_node(), address);
+
+    const rapidjson::Value* obj_value = data.get();
+    if(auto it = obj_value->FindMember("VALUE"); it != obj_value->MemberEnd())
+    {
+      obj_value = &it->value;
+    }
+
+    if(node)
+    {
+      auto addr = node->get_parameter();
+      if(addr)
+      {
+        json_parser::parse_value(*addr, *obj_value);
+        m_device->on_message(*addr);
+      }
+      else
+      {
+        m_device->on_unhandled_message(address, oscquery::detail::ReadValue(*obj_value));
+      }
+    }
+    else
+    {
+      m_device->on_unhandled_message(address, oscquery::detail::ReadValue(*obj_value));
+    }
+
+    return true;
+  }
+  catch(...)
+  {
+    return false;
+  }
+}
 }

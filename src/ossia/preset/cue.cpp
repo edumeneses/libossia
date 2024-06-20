@@ -45,6 +45,7 @@ add_node_recursively(ossia::presets::preset& preset, const ossia::net::node_base
     add_node_recursively(preset, *cld);
   }
 }
+
 static void load_in_cue(cue& c, const std::vector<ossia::net::node_base*>& nodes)
 {
   // Add all the nodes to the current preset
@@ -54,19 +55,14 @@ static void load_in_cue(cue& c, const std::vector<ossia::net::node_base*>& nodes
   }
 }
 
-static void list_all_children_unsorted_rec(ossia::net::node_base* node, auto& set)
+static void list_all_children_unsorted(ossia::net::node_base* node, auto& set)
 {
   for(auto& n : node->unsafe_children())
   {
     //if(n->get_parameter())
     set.insert(n.get());
-    list_all_children_unsorted_rec(n.get(), set);
+    list_all_children_unsorted(n.get(), set);
   }
-}
-
-static void list_all_children_unsorted(ossia::net::node_base* node, auto& set)
-{
-  list_all_children_unsorted_rec(node, set);
 }
 
 static void remove_node_recursively(
@@ -81,6 +77,7 @@ static void remove_node_recursively(
       ++it;
   }
 }
+
 static void remove_node_from_selection_recursively(
     ossia::hash_set<ossia::net::node_base*>& preset, const ossia::net::node_base& node)
 {
@@ -92,34 +89,32 @@ static void remove_node_from_selection_recursively(
   }
 }
 
-void cues::set_device(ossia::net::device_base* dev)
+void namespace_selection::set_device(ossia::net::device_base* dev)
 {
   m_selection.clear();
 
   if(this->dev)
   {
-    this->dev->on_node_created.disconnect<&cues::on_node_created>(this);
-    this->dev->on_node_removing.disconnect<&cues::on_node_removed>(this);
+    this->dev->on_node_created.disconnect<&namespace_selection::on_node_created>(this);
+    this->dev->on_node_removing.disconnect<&namespace_selection::on_node_removed>(this);
   }
 
   this->dev = dev;
   if(this->dev)
   {
-    this->dev->on_node_created.connect<&cues::on_node_created>(this);
-    this->dev->on_node_removing.connect<&cues::on_node_removed>(this);
+    this->dev->on_node_created.connect<&namespace_selection::on_node_created>(this);
+    this->dev->on_node_removing.connect<&namespace_selection::on_node_removed>(this);
   }
 
   namespace_select("/");
 }
 
-void cues::recall(int idx)
+void cues::recall(ossia::net::node_base& root, namespace_selection& sel, int idx)
 {
-  if(idx < 0)
-    return;
-  if(idx >= std::ssize(m_cues))
-    return;
+  if(!has_cue(idx))
+      return;
   m_current = idx;
-  recall();
+  recall(root, sel);
 }
 
 struct priority_sort
@@ -132,10 +127,12 @@ struct priority_sort
   }
 };
 
-void cues::recall()
+void cues::recall(ossia::net::node_base& root, namespace_selection& sel)
 {
-  auto& root = dev->get_root_node();
+  if(!has_cue(m_current))
+      return;
 
+  sel.m_selection.clear();
   boost::container::small_flat_multimap<
       ossia::net::parameter_base*, ossia::value*, 512, priority_sort>
       params;
@@ -144,9 +141,23 @@ void cues::recall()
   {
     // No pattern in saved cue
     if(auto n = ossia::net::find_node(root, addr))
+    {
       if(auto p = n->get_parameter())
+      {
         if(!ossia::net::get_recall_safe(*n))
+        {
           params.emplace(p, &val);
+        }
+      }
+
+      // Add the node to the running selection
+      while(sel.m_selection.insert(n).second)
+      {
+        n = n->get_parent();
+        if(!n)
+          break;
+      }
+    }
   }
 
   for(auto elt : params)
@@ -158,7 +169,7 @@ void cues::remove()
   remove(m_current);
 }
 
-void cues::namespace_select(std::string_view name)
+void namespace_selection::namespace_select(std::string_view name)
 {
   if(!dev)
     return;
@@ -172,11 +183,11 @@ void cues::namespace_select(std::string_view name)
   {
     //if(n->get_parameter())
     this->m_selection.insert(n);
-    list_all_children_unsorted_rec(n, this->m_selection);
+    list_all_children_unsorted(n, this->m_selection);
   }
 }
 
-void cues::namespace_deselect(std::string_view pattern)
+void namespace_selection::namespace_deselect(std::string_view pattern)
 {
   if(!dev)
     return;
@@ -205,19 +216,42 @@ void cues::namespace_deselect(std::string_view pattern)
   // }
 
   // v2
-  for(auto node : nodes)
+  for(auto n : nodes)
   {
-    remove_node_from_selection_recursively(m_selection, *node);
+    remove_node_from_selection_recursively(m_selection, *n);
   }
 }
 
-void cues::namespace_grab(std::string_view name)
+
+void namespace_selection::namespace_switch(std::string_view name)
+{
+  if(!dev)
+    return;
+
+  auto nodes = ossia::net::find_nodes(dev->get_root_node(), name);
+  for(auto n : nodes)
+  {
+      if(!this->m_selection.contains(n))
+      {
+        // Select
+        this->m_selection.insert(n);
+        list_all_children_unsorted(n, this->m_selection);
+      }
+      else
+      {
+        // Deselect
+        remove_node_from_selection_recursively(m_selection, *n);
+      }
+  }
+}
+
+void namespace_selection::namespace_grab(std::string_view name)
 {
   if(!dev)
     return;
 }
 
-void cues::on_node_created(const net::node_base& n)
+void namespace_selection::on_node_created(const net::node_base& n)
 {
   if(m_selection.find(&dev->get_root_node()) != m_selection.end())
   {
@@ -235,7 +269,7 @@ void cues::on_node_created(const net::node_base& n)
   }
 }
 
-void cues::on_node_removed(const net::node_base& n)
+void namespace_selection::on_node_removed(const net::node_base& n)
 {
   m_selection.erase(const_cast<net::node_base*>(&n));
 }
@@ -254,6 +288,7 @@ int cues::get_cue(std::string_view name)
     return std::distance(m_cues.begin(), it);
   }
 }
+
 std::optional<int> cues::find_cue(std::string_view name)
 {
   auto it = std::find_if(
@@ -270,17 +305,13 @@ std::optional<int> cues::find_cue(std::string_view name)
 
 void cues::create(std::string_view name)
 {
-  if(!dev)
-    return;
   m_current = get_cue(name);
 }
 
 void cues::remove(int idx)
 {
-  if(idx < 0)
-    return;
-  if(idx >= std::ssize(m_cues))
-    return;
+    if(!has_cue(idx))
+        return;
 
   m_cues.erase(m_cues.begin() + idx);
 
@@ -323,20 +354,43 @@ void cues::remove(std::string_view name)
   }
 }
 
-void cues::recall(std::string_view name)
+void cues::rename(int idx, std::string_view newname)
 {
-  if(!dev)
-    return;
-  m_current = get_cue(name);
-  recall();
+    if(!has_cue(idx))
+        return;
+
+    m_cues[idx].name.assign(newname.begin(), newname.end());
 }
 
-void cues::update(int idx)
+void cues::rename(std::string_view name, std::string_view newname)
 {
-  if(!dev)
-    return;
-  assert(idx >= 0);
-  assert(idx < std::ssize(this->m_cues));
+  auto it = std::find_if(this->m_cues.begin(), this->m_cues.end(), [=](const cue& c) {
+    return c.name == name;
+  });
+
+  if(it != this->m_cues.end())
+  {
+    int idx = std::distance(this->m_cues.begin(), it);
+    rename(idx, newname);
+  }
+}
+
+void cues::rename(std::string_view newname)
+{
+    rename(m_current, newname);
+}
+
+void cues::recall(ossia::net::node_base& root, namespace_selection& sel, std::string_view name)
+{
+  m_current = get_cue(name);
+  recall(root, sel);
+}
+
+void cues::update(ossia::net::node_base& root, const namespace_selection& selection, int idx)
+{
+  if(!has_cue(idx))
+      return;
+
   auto& cue = this->m_cues[idx];
 
   // v1
@@ -360,16 +414,18 @@ void cues::update(int idx)
   */
 
   // v3: we always update the local nodes
-  auto& root = dev->get_root_node();
-  for(auto& [addr, val] : cue.preset)
-  {
-    if(auto n = ossia::net::find_node(root, addr))
-      if(auto p = n->get_parameter())
-        val = p->value();
-  }
+  // for(auto& [addr, val] : cue.preset)
+  // {
+  //   if(auto n = ossia::net::find_node(root, addr))
+  //     if(auto p = n->get_parameter())
+  //       val = p->value();
+  // }
+
+  // v4: we start from scratch
+  cue.preset.clear();
 
   // And we also add the new ones
-  for(auto node : this->m_selection)
+  for(auto node : selection.m_selection)
   {
     if(auto p = node->get_parameter())
     {
@@ -387,15 +443,13 @@ void cues::update(int idx)
   }
 }
 
-void cues::update()
+void cues::update(ossia::net::node_base& root, const namespace_selection& selection)
 {
-  update(m_current);
+  update(root, selection, m_current);
 }
 
-void cues::update(std::string_view name)
+void cues::update(ossia::net::node_base& root, const namespace_selection& selection, std::string_view name)
 {
-  if(!dev)
-    return;
   // Question:
   // If we add the pattern: /foo.* to a cue
   // in the tree
@@ -406,21 +460,7 @@ void cues::update(std::string_view name)
   // is it taken as part of the update too ?
   // e.g. are patterns stored and evaluated lazily or eagerly?
   // Let's assume eagerly: cue only has explicit addresses
-  update(get_cue(name));
-}
-
-void cues::output(std::string_view name)
-{
-  if(!dev)
-    return;
-  int idx = get_cue(name);
-}
-
-void cues::output(std::string_view name, std::string_view pattern)
-{
-  if(!dev)
-    return;
-  int idx = get_cue(name);
+  update(root, selection, get_cue(name));
 }
 
 void cues::clear()
@@ -436,7 +476,7 @@ void cues::move(std::string_view name, int to)
 
 void cues::move(int from, int to)
 {
-  if(from < 0 || to < 0 || from == to)
+  if(from < 0 || to < 0 || from == to || from >= std::ssize(m_cues) || to >= std::ssize(m_cues))
     return;
   change_item_position(m_cues, from, to);
 }
@@ -500,7 +540,7 @@ static bool filter_any_pass(const ossia::net::node_base& n, const selection_filt
   return false;
 }
 
-void cues::namespace_filter_all(const selection_filters& pat)
+void namespace_selection::namespace_filter_all(const selection_filters& pat)
 {
   for(auto it = this->m_selection.begin(); it != this->m_selection.end();)
   {
@@ -515,7 +555,7 @@ void cues::namespace_filter_all(const selection_filters& pat)
   }
 }
 
-void cues::namespace_filter_any(const selection_filters& pat)
+void namespace_selection::namespace_filter_any(const selection_filters& pat)
 {
   for(auto it = this->m_selection.begin(); it != this->m_selection.end();)
   {
@@ -528,6 +568,11 @@ void cues::namespace_filter_any(const selection_filters& pat)
       it = m_selection.erase(it);
     }
   }
+}
+
+bool cues::has_cue(int cue) const noexcept
+{
+  return cue >= 0 && cue < std::ssize(m_cues);
 }
 
 }

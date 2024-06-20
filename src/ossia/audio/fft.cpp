@@ -186,17 +186,18 @@ namespace ossia
 {
 static_assert(sizeof(kfr::c64) == sizeof(fft_complex));
 static const constexpr auto fft_real_allocator = pod_allocator_avx2<kfr::f64>{};
-static const constexpr auto fft_cplx_allocator = pod_allocator_avx2<kfr::c64>{};
+
 static const constexpr auto alloc_real
     = [](std::size_t sz) { return fft_real_allocator.allocate(sz); };
+// FIXME KFR 6: no more pod
 static const constexpr auto alloc_complex
-    = [](std::size_t sz) { return fft_cplx_allocator.allocate(sz); };
+    = [](std::size_t sz) { return std::allocator<kfr::c64>{}.allocate(sz); };
 static const constexpr struct
 {
   void operator()(fft_real* p) const noexcept { fft_real_allocator.deallocate(p, 0); }
   void operator()(fft_complex* p) const noexcept
   {
-    fft_cplx_allocator.deallocate(reinterpret_cast<kfr::c64*>(p), 0);
+    std::allocator<kfr::c64>{}.deallocate(reinterpret_cast<kfr::c64*>(p), 0);
   }
 } fft_free;
 static const constexpr auto create_plan_r2c
@@ -212,7 +213,7 @@ static const constexpr auto run_plan_c2r
   return ((fftw_plan_s*)plan)
       ->execute((kfr::f64*)real, (kfr::c64*)cplx, temp.data(), kfr::cinvert_t{});
 };
-static const constexpr auto destroy_plan = [](auto&& p) {};
+static const constexpr auto destroy_plan = [](auto&& p) { delete(fftw_plan_s*)p; };
 static const constexpr auto cleanup = [] {};
 static const constexpr auto alignment_of = [] {};
 static const constexpr auto FFTW_DESTROY_INPUT = 0;

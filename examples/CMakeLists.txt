@@ -72,9 +72,7 @@ if(OSSIA_PROTOCOL_OSCQUERY)
   ossia_add_example(network_oscquery_recorder "${CMAKE_CURRENT_SOURCE_DIR}/Network/asio/OSCQuery_recorder.cpp")
 
   ossia_add_example(pd_controller "${CMAKE_CURRENT_SOURCE_DIR}/Network/PdController.cpp")
-  if(OSSIA_PROTOCOL_LEAPMOTION)
-    ossia_add_example(network_leapmotion_oscquery "${CMAKE_CURRENT_SOURCE_DIR}/Network/LeapToOscQuery.cpp")
-  endif()
+
   if(OSSIA_PROTOCOL_LIBMAPPER)
     ossia_add_example(network_libmapper "${CMAKE_CURRENT_SOURCE_DIR}/Network/Libmapper.cpp")
   endif()
@@ -113,6 +111,10 @@ endif()
 
 if(OSSIA_PROTOCOL_SERIAL)
   ossia_add_example(network_arduino "${CMAKE_CURRENT_SOURCE_DIR}/Network/Arduino.cpp")
+endif()
+
+if(OSSIA_PROTOCOL_MQTT5)
+  ossia_add_example(mqtt_publish "${CMAKE_CURRENT_SOURCE_DIR}/Network/Mqtt_publication.cpp")
 endif()
 
 ossia_add_example(export_namespace_to_json "${CMAKE_CURRENT_SOURCE_DIR}/Preset/Export_namespace_to_json.cpp")

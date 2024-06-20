@@ -17,7 +17,7 @@ endif()
 if(Git_FOUND)
 if(${MAXSDK_PATH} STREQUAL "${OSSIA_3RDPARTY_FOLDER}/max-sdk")
   execute_process(
-      COMMAND Git::Git submodule update --init -- ${OSSIA_3RDPARTY_FOLDER}/max-sdk
+      COMMAND "${GIT_EXECUTABLE}" submodule update --init -- ${OSSIA_3RDPARTY_FOLDER}/max-sdk
       WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
       COMMAND_ERROR_IS_FATAL ANY)
 endif()
@@ -39,8 +39,8 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 set(PROJECT_SRCS
     src/assert.hpp
     src/assert.cpp
-    src/cue.hpp
-    src/cue.cpp
+    src/ocue.hpp
+    src/ocue.cpp
     src/ossia-max.cpp
     src/ossia-max.hpp
     src/object_base.cpp
@@ -103,7 +103,7 @@ use_gold(${PROJECT_NAME})
 add_linker_warnings_external(${PROJECT_NAME})
 
 target_link_libraries(${PROJECT_NAME} PRIVATE ossia
-  ${MAXSDK_API_LIBRARY}
+  $<LINK_ONLY:$<$<BOOL:${WIN32}>:${MAXSDK_API_LIBRARY}>>
   $<LINK_ONLY:re2::re2>
   $<LINK_ONLY:websocketpp::websocketpp>
 )

@@ -95,9 +95,6 @@ endif()
 if(OSSIA_PROTOCOL_PHIDGETS)
   install_headers_rec("${OSSIA_PHIDGETS_HEADERS}")
 endif()
-if(OSSIA_PROTOCOL_LEAPMOTION)
-  install_headers_rec("${OSSIA_LEAPMOTION_HEADERS}")
-endif()
 if(OSSIA_C)
   install_headers_rec("${OSSIA_C_HEADERS}")
 endif()
@@ -288,7 +285,7 @@ install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/weakjack"
 find_program(BOOST_BCP "bcp")
 if(BOOST_BCP)
    # install a subset of boost thanks to bcp
-   install(CODE "execute_process(COMMAND bcp --boost=${Boost_INCLUDE_DIR} boost/any.hpp boost/container/small_vector.hpp boost/container/static_vector.hpp boost/lexical_cast.hpp boost/algorithm/string/replace.hpp boost/endian/conversion.hpp ${CMAKE_INSTALL_PREFIX}/include)")
+   install(CODE "execute_process(COMMAND bcp --boost=${Boost_INCLUDE_DIR} boost/any.hpp boost/container/flat_map.hpp boost/container/flat_set.hpp boost/container/small_vector.hpp boost/container/static_vector.hpp boost/lexical_cast.hpp boost/algorithm/string/replace.hpp boost/endian/conversion.hpp boost/predef.h boost/variant2.hpp ${CMAKE_INSTALL_PREFIX}/include)")
 else()
   if(OSSIA_MUST_INSTALL_BOOST)
     install(DIRECTORY "${OSSIA_3RDPARTY_FOLDER}/${BOOST_VERSION}/boost"

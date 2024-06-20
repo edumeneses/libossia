@@ -56,11 +56,11 @@ option(OSSIA_PROTOCOL_MIDI "Enable MIDI protocol" ON)
 option(OSSIA_PROTOCOL_OSC "Enable OSC protocol" ON)
 option(OSSIA_PROTOCOL_MINUIT "Enable Minuit protocol" ON)
 option(OSSIA_PROTOCOL_OSCQUERY "Enable OSCQuery protocol" ON)
+option(OSSIA_PROTOCOL_MQTT5 "Enable MQTT 5 protocol" ON)
 option(OSSIA_PROTOCOL_HTTP "Enable HTTP protocol" ON) # Requires Qt
 option(OSSIA_PROTOCOL_WEBSOCKETS "Enable WebSockets protocol" OFF) # Requires Qt
 option(OSSIA_PROTOCOL_SERIAL "Enable Serial port protocol" OFF) # Requires Qt
 option(OSSIA_PROTOCOL_PHIDGETS "Enable Phidgets protocol" OFF) # Requires Phidgets library
-option(OSSIA_PROTOCOL_LEAPMOTION "Enable Leapmotion protocol" OFF) # Requires LeapMotion Orion library
 option(OSSIA_PROTOCOL_JOYSTICK "Enable Joystick protocol" ON)  # Requires SDL2 library
 option(OSSIA_PROTOCOL_WIIMOTE "Enable Wiimote Protocol" ON) #use wiiuse
 option(OSSIA_PROTOCOL_ARTNET "Enable artnet protocol" ON) #use libartnet
@@ -84,11 +84,11 @@ set(OSSIA_AVAILABLE_PROTOCOLS
   OSC MINUIT OSCQUERY
   HTTP WEBSOCKETS SERIAL
   PHIDGETS
-  LEAPMOTION
   JOYSTICK
   WIIMOTE
   ARTNET
   LIBMAPPER
+  MQTT5
 )
 
 set(CMAKE_MODULE_PATH "${CMAKE_MODULE_PATH};${PROJECT_SOURCE_DIR}/CMake;${PROJECT_SOURCE_DIR}/cmake/cmake-modules;")

@@ -96,7 +96,7 @@ public:
   static void class_setup(t_class* c);
 
   void fill_selection();
-  void update_path();
+  void update_path(ossia::net::generic_device* explicit_device = nullptr);
   void get_hierarchy();
 
   void set_description();
@@ -179,8 +179,9 @@ public:
 
   std::vector<std::string> m_paths{};
 
+  std::vector<std::shared_ptr<matcher>> find_or_create_matchers(ossia::net::generic_device* device_to_use = nullptr);
+
 protected:
-  std::vector<std::shared_ptr<matcher>> find_or_create_matchers();
   void remove_matchers(const ossia::net::node_base& m);
   void remove_matcher(const std::shared_ptr<matcher>& m);
 
@@ -206,7 +207,7 @@ struct value2atom
   void operator()(impulse) const
   {
     t_atom a;
-    atom_setsym(&a, gensym("bang"));
+    atom_setsym(&a, _sym_bang);
     data.push_back(a);
   }
 
@@ -239,9 +240,19 @@ struct value2atom
     data.push_back(a);
   }
 
-  void operator()(const std::string& str) const
+  void operator()(auto*) const noexcept = delete;
+
+  void operator()(const char* str) const
   {
-    t_symbol* s = gensym(str.c_str());
+    t_symbol* s = gensym(str);
+    t_atom a;
+    atom_setsym(&a, s);
+    data.push_back(a);
+  }
+
+  void operator()(std::string_view str) const
+  {
+    t_symbol* s = gensym(str.data());
     t_atom a;
     atom_setsym(&a, s);
     data.push_back(a);
@@ -268,9 +279,41 @@ struct value2atom
 
   void operator()(const ossia::value_map_type& t) const { }
 
+  template <typename... T>
+    requires(sizeof...(T) > 1)
+  OSSIA_INLINE void operator()(T&&... t)
+  {
+    ((*this)(t), ...);
+  }
+
   void operator()() const { }
 };
 
+inline void
+write_message(std::vector<t_atom>& va, void* out, t_symbol* sym, auto&&... args)
+{
+  va.clear();
+  value2atom vm{va};
+  vm(args...);
+  outlet_anything(out, sym, va.size(), va.data());
+}
+
+inline void write_message(
+    std::vector<t_atom>& va, void* out, t_symbol* prefix, t_symbol* sym, auto&&... args)
+{
+  if(!prefix)
+  {
+    write_message(va, out, sym, args...);
+  }
+  else
+  {
+    va.clear();
+    value2atom vm{va};
+    vm(std::string_view(sym->s_name));
+    vm(args...);
+    outlet_anything(out, prefix, va.size(), va.data());
+  }
+}
 // Template typed function switcher to convert t_atom or standard type into
 // ossia::value
 template <typename T>
@@ -284,12 +327,11 @@ struct value_visitor
     {
       if(x->m_defer_set)
       {
-        defer_low(
-            (t_object*)x, (method)object_base::defer_set_output, gensym("set"), 1, &a);
+        defer_low((t_object*)x, (method)object_base::defer_set_output, _sym_set, 1, &a);
       }
       else
       {
-        outlet_anything(x->m_set_out, gensym("set"), 1, &a);
+        outlet_anything(x->m_set_out, _sym_set, 1, &a);
       }
     }
   }
@@ -300,12 +342,11 @@ struct value_visitor
     {
       if(x->m_defer_set)
       {
-        defer_low(
-            (t_object*)x, (method)object_base::defer_set_output, gensym("set"), N, a);
+        defer_low((t_object*)x, (method)object_base::defer_set_output, _sym_set, N, a);
       }
       else
       {
-        outlet_anything(x->m_set_out, gensym("set"), N, a);
+        outlet_anything(x->m_set_out, _sym_set, N, a);
       }
     }
   }
@@ -359,7 +400,7 @@ struct value_visitor
 
     for(int i = 0; i < N; i++)
       atom_setfloat(a + i, vec[i]);
-    outlet_list(x->m_data_out, gensym("list"), N, a);
+    outlet_list(x->m_data_out, _sym_list, N, a);
 
     set_out(N, a);
   }
@@ -377,7 +418,7 @@ struct value_visitor
 
     t_atom* list_ptr = !va.empty() ? va.data() : nullptr;
     if(x->m_data_out)
-      outlet_list(x->m_data_out, gensym("list"), va.size(), list_ptr);
+      outlet_list(x->m_data_out, _sym_list, va.size(), list_ptr);
 
     set_out(va.size(), list_ptr);
   }

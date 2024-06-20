@@ -50,7 +50,11 @@ extern "C" void ossia_client_setup()
 
   class_addmethod(c, (method)client::assist, "assist", A_NOTHING, 0);
 
-  class_addmethod(c, (method)client::notify, "notify", A_CANT, 0);
+  CLASS_ATTR_LONG(c, "feedback", 0, client, m_feedback);
+  CLASS_ATTR_STYLE(c, "feedback", 0, "onoff");
+  CLASS_ATTR_LABEL(c, "feedback", 0, "Control feebdack to host device");
+
+  class_addmethod(c, (method)client::do_notify, "notify", A_CANT, 0);
 
   class_register(CLASS_BOX, c);
   ossia_library.ossia_client_class = c;
@@ -61,6 +65,31 @@ namespace ossia
 namespace max_binding
 {
 
+
+t_max_err
+client::do_notify(client* x, t_symbol* s, t_symbol* msg, void* a, void* data)
+{
+  t_symbol* attrname;
+
+  if(!x->m_lock && msg == gensym("attr_modified"))
+  {
+    attrname = (t_symbol*)object_method((t_object*)data, gensym("getname"));
+
+    if(attrname == gensym("feedback"))
+      x->set_feedback(x->m_feedback);
+    else
+      return object_base::notify(x, s, msg, a, data);
+  }
+  return 0;
+}
+
+void client::set_feedback(bool b) {
+
+  if(m_device)
+  {
+    m_device->get_protocol().set_feedback(b);
+  }
+}
 void* client::create(t_symbol* name, long argc, t_atom* argv)
 {
   auto& ossia_library = ossia_max::instance();
@@ -94,7 +123,7 @@ void* client::create(t_symbol* name, long argc, t_atom* argv)
     long attrstart = attr_args_offset(argc, argv);
 
     // check name argument
-    x->m_name = gensym("Max");
+    x->m_name = _sym_max;
     if(attrstart && argv)
     {
       if(atom_gettype(argv) == A_SYM)
@@ -116,6 +145,7 @@ void* client::create(t_symbol* name, long argc, t_atom* argv)
     // process attr args, if any
     attr_args_process(x, argc - attrstart, argv + attrstart);
 
+    object_attach_byptr_register(x, x, CLASS_BOX);
     defer_low(x, (method)object_base::loadbang, nullptr, 0, nullptr);
 
     ossia_library.clients.push_back(x);
@@ -368,6 +398,7 @@ void client::connect(client* x)
   }
 }
 
+
 void client::get_devices(client* x)
 {
   auto minuit_devices = ZeroconfMinuitListener::get_devices();
@@ -415,9 +446,11 @@ void client::unregister_children()
 
 void client::update(client* x)
 {
+
   if(x->m_device)
   {
     x->m_device->get_protocol().update(*x->m_device);
+    output_all_values(x->m_patcher, true);
   }
 }
 

@@ -23,6 +23,8 @@ if(IOS OR CMAKE_SYSTEM_NAME MATCHES Emscripten)
   set(OSSIA_PROTOCOL_WEBSOCKETS FALSE CACHE INTERNAL "")
   set(OSSIA_PROTOCOL_SERIAL FALSE CACHE INTERNAL "")
   set(OSSIA_PROTOCOL_ARTNET FALSE CACHE INTERNAL "")
+  set(OSSIA_PROTOCOL_MQTT5 FALSE CACHE INTERNAL "")
+  set(OSSIA_PROTOCOL_COAP FALSE CACHE INTERNAL "")
 endif()
 
 if(NOT OSSIA_QML)
@@ -131,12 +133,6 @@ if(OSSIA_PROTOCOL_PHIDGETS)
   set(OSSIA_PROTOCOLS ${OSSIA_PROTOCOLS} Phidgets)
 endif()
 
-if(OSSIA_PROTOCOL_LEAPMOTION)
-  target_sources(ossia PRIVATE ${OSSIA_LEAPMOTION_HEADERS} ${OSSIA_LEAPMOTION_SRCS})
-  target_link_libraries(ossia PUBLIC LeapMotion)
-  set(OSSIA_PROTOCOLS ${OSSIA_PROTOCOLS} LeapMotion)
-endif()
-
 if(OSSIA_PROTOCOL_JOYSTICK)
   target_sources(ossia PRIVATE ${OSSIA_JOYSTICK_SRCS} ${OSSIA_JOYSTICK_HEADERS})
   target_link_libraries(ossia PRIVATE $<BUILD_INTERFACE:ossia::sdl2>)
@@ -164,6 +160,17 @@ if (OSSIA_PROTOCOL_LIBMAPPER)
     set(OSSIA_PROTOCOLS ${OSSIA_PROTOCOLS} libmapper)
 endif()
 
+if (OSSIA_PROTOCOL_MQTT5)
+    target_sources(ossia PRIVATE ${OSSIA_MQTT5_SRCS} ${OSSIA_MQTT5_HEADERS})
+    target_link_libraries(ossia PRIVATE Async::MQTT5)
+    set(OSSIA_PROTOCOLS ${OSSIA_PROTOCOLS} mqtt5)
+endif()
+
+if (OSSIA_PROTOCOL_COAP)
+    target_sources(ossia PRIVATE ${OSSIA_COAP_SRCS} ${OSSIA_COAP_HEADERS})
+    target_link_libraries(ossia PRIVATE libcoap::coap-3)
+    set(OSSIA_PROTOCOLS ${OSSIA_PROTOCOLS} coap)
+endif()
 
 # Additional features
 if(OSSIA_C)
@@ -183,8 +190,6 @@ endif()
 
 if(OSSIA_QT)
   target_link_libraries(ossia PUBLIC ${QT_PREFIX}::Core)
-
-  disable_qt_plugins(ossia)
   target_include_directories(ossia
     PRIVATE
       "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/ossia-qt>"
@@ -279,8 +284,8 @@ if(OSSIA_DATAFLOW)
       )
     elseif(OSSIA_ENABLE_KFR AND KFR_ENABLE_DFT) # defined in kfr/CMakeLists.txt
       target_link_libraries(ossia PRIVATE
-        $<BUILD_INTERFACE:kfr>
-        $<BUILD_INTERFACE:kfr_dft>
+        "$<BUILD_INTERFACE:kfr>"
+        "$<BUILD_INTERFACE:$<LINK_LIBRARY:WHOLE_ARCHIVE,kfr_dft>>"
       )
     endif()
     target_sources(ossia PRIVATE ${OSSIA_FFT_HEADERS} ${OSSIA_FFT_SRCS})

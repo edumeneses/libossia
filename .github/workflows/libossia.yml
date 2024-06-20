@@ -4,7 +4,7 @@ on: push
 
 jobs:
   build-macos:
-    runs-on: macos-13
+    runs-on: macos-14
     environment: 'Apple Certificate'
     strategy:
       matrix:
@@ -14,8 +14,6 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - uses: ./.github/actions/latest-mac-toolchain
-    - name: Install Dependencies
-      run: brew install ninja
     - name: Build
       env: 
         STATIC: ${{ matrix.static }}
@@ -28,48 +26,19 @@ jobs:
           -DOSSIA_TESTING=1 \
           -DOSSIA_CI=1 \
           -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
+
         cmake --build build
         cmake --build build --target test
         cmake --build build --target install
 
-    - name: Code Signing
-      shell: bash
-      env:
+    - uses: ./.github/actions/mac-codesign
+      with:
+        path-to-sign: "install/lib"
+        output-name: libossia.zip
         MAC_CERT_B64: ${{ secrets.MAC_CERT_B64 }}
         MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
         MAC_ALTOOL_PASSWORD: ${{ secrets.MAC_ALTOOL_PASSWORD }}
-      run: |
-        # Setup codesigning
-        # Thanks https://www.update.rocks/blog/osx-signing-with-travis/
-        (
-          set +x
-          KEY_CHAIN=build.keychain
-          echo "$MAC_CERT_B64" | base64 --decode > ossia-cert.p12
 
-          security create-keychain -p azure $KEY_CHAIN
-          security default-keychain -s $KEY_CHAIN
-          security unlock-keychain -p azure $KEY_CHAIN
-          security import ossia-cert.p12 -k $KEY_CHAIN -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign;
-          security set-key-partition-list -S apple-tool:,apple: -s -k azure $KEY_CHAIN
-
-          rm -rf *.p12
-        )
-
-        security unlock-keychain -p azure build.keychain
-
-        (
-          cd install
-          find lib \( -name "*.dylib" -o -name "*.a" -o  -name "*.so" \) -exec echo Signing {} + -exec codesign --force --timestamp --sign "ossia.io" {} +
-
-          zip -r ossia-shared-release.zip lib/
-          xcrun altool \
-                --notarize-app \
-                -t osx \
-                -f "ossia-shared-release.zip" \
-                --primary-bundle-id "io.ossia.ossia-shared-release" \
-                -u jeanmichael.celerier@gmail.com -p "@env:MAC_ALTOOL_PASSWORD"
-          rm ossia-shared-release.zip
-        )
     - name: Archive Package
       uses: actions/upload-artifact@v2
       with:
@@ -85,16 +54,14 @@ jobs:
       fail-fast: false
     steps:
     - uses: actions/checkout@v4
-    - name: install deps
-      run: choco install -y ninja
+    - uses: ./.github/actions/latest-msvc-toolchain
+
     - name : Build
       shell: cmd
       env: 
         STATIC: ${{ matrix.static }}
         BUILD_TYPE: ${{ matrix.build_type }}
       run: |
-        call ci\msvc.bat
-
         cmake -B build -S %GITHUB_WORKSPACE% -GNinja -DOSSIA_PCH=0 -DCMAKE_SYSTEM_VERSION=7 -DCMAKE_INSTALL_PREFIX=install -DCMAKE_BUILD_TYPE=%BUILD_TYPE% -DOSSIA_STATIC=%STATIC% -DOSSIA_CI=1 -DOSSIA_TESTING=1
         cmake --build build
         cmake --build build --target test
@@ -115,17 +82,11 @@ jobs:
       fail-fast: false
     steps:
     - uses: actions/checkout@v4
-    - name: Install Dependencies
-      run: | 
-        sudo apt-get update -yqq 
-        sudo apt-get upgrade -yqq
-        sudo apt-get install -yqq build-essential g++-11 gcc-11 ninja-build libavahi-client-dev
+    - uses: ./.github/actions/latest-ubuntu-toolchain
     - name: Build
       env: 
         STATIC: ${{ matrix.static }}
         BUILD_TYPE: ${{ matrix.build_type }}
-        CC: gcc-11
-        CXX: g++-11
 
       run: | 
         cmake -B build -S ${GITHUB_WORKSPACE} -GNinja \
@@ -159,15 +120,13 @@ jobs:
         BUILD_TYPE: ${{ matrix.build_type }}
       run: |
         export CTEST_OUTPUT_ON_FAILURE=1
-        export RPI_ROOT_PATH=/opt/cross-pi-gcc
-        export PKG_CONFIG_SYSROOT_DIR=$RPI_ROOT_PATH
-        export PKG_CONFIG_LIBDIR=${RPI_ROOT_PATH}/usr/lib/pkgconfig:${RPI_ROOT_PATH}/usr/share/pkgconfig:${RPI_ROOT_PATH}/usr/lib/arm-linux-gnueabihf/pkgconfig/
         export PATH=/opt/cross-pi-gcc/bin:${PATH}
         export LD_LIBRARY_PATH=/opt/cross-pi-gcc/lib:${LD_LIBRARY_PATH}
 
         cmake -B build -S ${GITHUB_WORKSPACE} \
-            -DCMAKE_TOOLCHAIN_FILE="${GITHUB_WORKSPACE}/cmake/toolchain/arm-linux-gnueabihf.cmake" \
-            -DCMAKE_BUILD_TYPE=$BUILD_TYPE -DOSSIA_STATIC=$STATIC \
+            -DCMAKE_TOOLCHAIN_FILE="/opt/cross-pi-gcc/aarch64-rpi3-linux-gnu.toolchain.cmake" \
+            -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
+            -DOSSIA_STATIC=$STATIC \
             -DCMAKE_INSTALL_PREFIX=install \
             -DOSSIA_CI=1
         cmake --build build

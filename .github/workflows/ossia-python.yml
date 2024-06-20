@@ -4,13 +4,11 @@ on: push
 
 jobs:
   build-macos:
-    runs-on: macos-13
+    runs-on: macos-14
     environment: 'Apple Certificate'
     steps:
     - uses: actions/checkout@v4
     - uses: ./.github/actions/latest-mac-toolchain
-    - name: Install Dependencies
-      run: brew install ninja
     - name: Build
       run: | 
         cmake -B build -S ${GITHUB_WORKSPACE} -G Ninja \
@@ -18,36 +16,15 @@ jobs:
           -DOSSIA_CI=1 \
           -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64"
         cmake --build build
-    - name: Code Signing
-      shell: bash
-      env:
+        
+    - uses: ./.github/actions/mac-codesign
+      with:
+        path-to-sign: "build"
+        output-name: "ossia-python.zip"
         MAC_CERT_B64: ${{ secrets.MAC_CERT_B64 }}
         MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
         MAC_ALTOOL_PASSWORD: ${{ secrets.MAC_ALTOOL_PASSWORD }}
-      run: |
-        # Setup codesigning
-        # Thanks https://www.update.rocks/blog/osx-signing-with-travis/
-        (
-          set +x
-          KEY_CHAIN=build.keychain
-          echo "$MAC_CERT_B64" | base64 --decode > ossia-cert.p12
-
-          security create-keychain -p azure $KEY_CHAIN
-          security default-keychain -s $KEY_CHAIN
-          security unlock-keychain -p azure $KEY_CHAIN
-          security import ossia-cert.p12 -k $KEY_CHAIN -P "$MAC_CERT_PASSWORD" -T /usr/bin/codesign;
-          security set-key-partition-list -S apple-tool:,apple: -s -k azure $KEY_CHAIN
-
-          rm -rf *.p12
-        )
-
-        security unlock-keychain -p azure build.keychain
-
-        for lib in `find build -name "ossia_python.cpython*.so" -print`
-        do
-          echo Signing ${lib}
-          codesign --force --timestamp --sign "ossia.io" ${lib}
-        done
+        
     - name: Build Wheel
       shell: bash
       run: |
@@ -58,14 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
-    - name: Install Dependencies
-      run: | 
-        sudo apt-get update -yqq 
-        sudo apt-get upgrade -yqq
-        sudo apt-get install -yqq build-essential gcc-11 g++-11 ninja-build libavahi-client-dev
-      env: 
-        CC: gcc-11
-        CXX: g++-11
+    - uses: ./.github/actions/latest-ubuntu-toolchain
     - name: Build ossia-python
       run: | 
         cmake -B build -S ${GITHUB_WORKSPACE} -G Ninja -DOSSIA_PYTHON_ONLY=1 -DOSSIA_CI=1

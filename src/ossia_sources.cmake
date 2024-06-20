@@ -491,12 +491,6 @@ set(OSSIA_PHIDGETS_SRCS
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/protocols/phidgets/phidgets_protocol.cpp"
     "${CMAKE_CURRENT_SOURCE_DIR}/ossia/protocols/phidgets/phidgets_node.cpp")
 
-set(OSSIA_LEAPMOTION_HEADERS
-    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/protocols/leapmotion/leapmotion_device.hpp")
-
-set(OSSIA_LEAPMOTION_SRCS
-  "${CMAKE_CURRENT_SOURCE_DIR}/ossia/protocols/leapmotion/leapmotion_device.cpp")
-
 set(OSSIA_JOYSTICK_HEADERS
   "${CMAKE_CURRENT_SOURCE_DIR}/ossia/protocols/joystick/joystick_protocol.hpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/ossia/protocols/joystick/joystick_manager.hpp"
@@ -535,6 +529,25 @@ set(OSSIA_ARTNET_SRCS
   "${CMAKE_CURRENT_SOURCE_DIR}/ossia/protocols/artnet/dmxusbpro_protocol.cpp"
   "${CMAKE_CURRENT_SOURCE_DIR}/ossia/protocols/artnet/artnet_protocol.cpp"
 )
+
+set(OSSIA_MQTT5_HEADERS
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/protocols/mqtt/mqtt_protocol.hpp")
+
+set(OSSIA_MQTT5_SRCS
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/protocols/mqtt/mqtt_protocol.cpp")
+
+set(OSSIA_COAP_HEADERS
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/protocols/coap/coap_client_protocol.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/protocols/coap/coap_server_protocol.hpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/protocols/coap/link_format_parser.hpp"
+)
+
+set(OSSIA_COAP_SRCS
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/protocols/coap/coap_client_protocol.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/protocols/coap/coap_server_protocol.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/ossia/protocols/coap/link_format_parser.cpp"
+)
+
 
 
 set(OSSIA_WS_CLIENT_HEADERS

@@ -19,17 +19,11 @@
 #define OSSIA_EXTERN_EXPORT_HPP(EXPORT) EXPORT
 #define OSSIA_EXTERN_EXPORT_CPP(EXPORT)
 
-#if defined(__cplusplus) \
-    && ((__cplusplus >= 201103L) || (defined(_MSC_VER) && _MSC_VER >= 1900))
-#define OSSIA_CXX11 1
-#endif
-#if defined(__cplusplus) \
-    && ((__cplusplus >= 201403L) || (defined(_MSC_VER) && _MSC_VER >= 1900))
-#define OSSIA_CXX14 1
-#endif
-#if defined(__cplusplus) \
-    && ((__cplusplus >= 201703L) || (defined(_MSC_VER) && _MSC_VER >= 1900))
-#define OSSIA_CXX17 1
+#undef OSSIA_DEPRECATED
+#if defined(__clang__) || defined(_MSC_VER) || (defined(__GNUC__) && (__GNUC__ >= 13))
+#define OSSIA_DEPRECATED(REASON) [[deprecated(REASON)]]
+#else
+#define OSSIA_DEPRECATED(REASON)
 #endif
 
 /// Constexpr support ///
@@ -109,6 +103,10 @@
 #define BOOST_ERROR_CODE_HEADER_ONLY 1
 #define BOOST_SYSTEM_NO_DEPRECATED 1
 #define BOOST_LEXICAL_CAST_ASSUME_C_LOCALE 1
+
+// Disable parallel stl as otherwise
+// we need to link against TBB on GCC Linux...
+#define BOOST_UNORDERED_DISABLE_PARALLEL_ALGORITHMS 1
 
 #if !defined(BOOST_REGEX_NO_LIB)
 #define BOOST_REGEX_NO_LIB 1
