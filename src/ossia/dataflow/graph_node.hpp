@@ -123,7 +123,7 @@ public:
   virtual void prepare(const execution_state& st) noexcept;
   [[nodiscard]] virtual bool consumes(const execution_state&) const noexcept;
   virtual void run(const token_request&, exec_state_facade) noexcept;
-  [[nodiscard]] virtual std::string label() const noexcept;
+  [[nodiscard]] virtual std::string label() const noexcept = 0;
 
   [[nodiscard]] bool has_port_inputs() const noexcept;
   [[nodiscard]] bool has_global_inputs() const noexcept;
@@ -145,6 +145,7 @@ public:
   void set_executed(bool b) noexcept { m_executed = b; }
 
   void request(const ossia::token_request& req) noexcept;
+  void process_time(const ossia::token_request& req, execution_state& st) noexcept;
 
   void disable() noexcept { requested_tokens.clear(); }
 
@@ -154,14 +155,36 @@ public:
   void set_mute(bool b) noexcept { m_muted = b; }
   [[nodiscard]] bool muted() const noexcept { return m_muted; }
 
+  /**
+   * Indicates that the node implementation must always be scheduled on the same thread.
+   * Main use case: QJSEngine which is not thread-safe.
+   */
+  [[nodiscard]]
+  bool not_threadable() const noexcept
+  {
+    return m_not_threadable;
+  }
+
+  /**
+   * Number of frames (physical time) processed through this node since the start 
+   * of the current execution.
+   */
+  [[nodiscard]]
+  int64_t processed_frames() const noexcept
+  {
+    return m_processed_frames;
+  }
+
   virtual void all_notes_off() noexcept;
   token_request_vec requested_tokens;
 
 protected:
   inlets m_inlets;
   outlets m_outlets;
+  int64_t m_processed_frames{};
 
   bool m_executed{};
+  bool m_not_threadable{};
 
 private:
   bool m_start_discontinuous{};

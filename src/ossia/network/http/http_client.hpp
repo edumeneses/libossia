@@ -3,6 +3,7 @@
 
 #include <ossia/detail/fmt.hpp>
 #include <ossia/detail/logger.hpp>
+#include <ossia/detail/parse_relax.hpp>
 
 #include <boost/asio.hpp>
 #include <boost/asio/placeholders.hpp>
@@ -163,7 +164,21 @@ private:
       std::istream response_stream(&m_response);
       std::string header;
       while(std::getline(response_stream, header) && header != "\r")
-        ;
+      {
+        if(header.starts_with("Content-Length: "))
+        {
+          std::string_view sz(header.begin() + strlen("Content-Length: "), header.end());
+          if(auto num = ossia::parse_relax<int>(sz))
+          {
+            m_contentLength = *num;
+          }
+          else
+          {
+            ossia::logger().error("Invalid HTTP Content-length: {}", sz);
+            return;
+          }
+        }
+      }
 
       // Start reading remaining data until EOF.
       boost::asio::async_read(
@@ -185,35 +200,41 @@ private:
     if(!err)
     {
       // Continue reading remaining data until EOF.
-      boost::asio::async_read(
-          m_socket, m_response, boost::asio::transfer_at_least(1),
-          [self = shared_from_this()](
-              const boost::system::error_code& err, std::size_t size) {
-        self->handle_read_content(err, size);
-          });
+      if(m_contentLength < 0 || m_response.size() < m_contentLength)
+      {
+        boost::asio::async_read(
+            m_socket, m_response, boost::asio::transfer_at_least(1),
+            [self = shared_from_this()](
+                const boost::system::error_code& err, std::size_t size) {
+          self->handle_read_content(err, size);
+        });
+        return;
+      }
+      // else we fallthrough the processing case at the end
     }
     else if(err != boost::asio::error::eof)
     {
       ossia::logger().error("HTTP Error: {}", err.message());
       m_err(*this);
+      return;
     }
-    else if(err == boost::asio::error::eof)
-    {
-      // Write all of the data that has been read so far.
-      const auto& dat = m_response.data();
-      auto begin = boost::asio::buffers_begin(dat);
-      auto end = boost::asio::buffers_end(dat);
-      auto sz = end - begin;
-      std::string str;
-      str.reserve(sz + 16); // for RapidJSON simd parsing which reads past bounds
-      str.assign(begin, end);
-      m_fun(*this, str);
-    }
+
+    // err == boost::asio::error::eof or we reached content-length
+    // Write all of the data that has been read so far.
+    const auto& dat = m_response.data();
+    auto begin = boost::asio::buffers_begin(dat);
+    auto end = boost::asio::buffers_end(dat);
+    auto sz = end - begin;
+    std::string str;
+    str.reserve(sz + 16); // for RapidJSON simd parsing which reads past bounds
+    str.assign(begin, end);
+    m_fun(*this, str);
   }
 
   tcp::resolver m_resolver;
   tcp::socket m_socket;
   boost::asio::streambuf m_response;
+  int m_contentLength{-1};
   Fun m_fun;
   Err m_err;
 };

@@ -7,6 +7,7 @@ if(Git_FOUND AND OSSIA_SUBMODULE_AUTOUPDATE)
       compile-time-regular-expressions
       Flicks
       fmt
+      magic_enum
       mdspan
       nano-signal-slot
       rapidfuzz-cpp
@@ -35,7 +36,7 @@ if(Git_FOUND AND OSSIA_SUBMODULE_AUTOUPDATE)
     set(OSSIA_SUBMODULES ${OSSIA_SUBMODULES} dno dr_libs exprtk libsamplerate PerlinNoise rubberband)
   endif()
 
-  if(OSSIA_ENABLE_FFT)
+  if(OSSIA_ENABLE_FFT OR OSSIA_PROTOCOL_AUDIO OR OSSIA_DATAFLOW)
     set(OSSIA_SUBMODULES ${OSSIA_SUBMODULES} kfr)
   endif()
 
@@ -88,6 +89,7 @@ include(deps/concurrentqueue)
 include(deps/ctre)
 include(deps/flicks)
 include(deps/fmt)
+include(deps/magic_enum)
 include(deps/mdspan)
 include(deps/nano-signal-slot)
 include(deps/rapidfuzz)

@@ -21,13 +21,15 @@ if(NOT TARGET libcoap::coap-3)
     FetchContent_Declare(
       libcoap
       GIT_REPOSITORY "https://github.com/obgm/libcoap"
-      GIT_TAG develop
+      GIT_TAG v4.3.5-rc2
       GIT_PROGRESS true
     )
 
     set(_oldmode ${BUILD_SHARED_LIBS})
     set(BUILD_SHARED_LIBS OFF)
 
+    set(ENABLE_WS ON)
+    set(ENABLE_WS ON CACHE INTERNAL "")
     set(ENABLE_DTLS OFF)
     set(ENABLE_DTLS OFF CACHE INTERNAL "")
     set(ENABLE_EXAMPLES OFF)
@@ -38,6 +40,8 @@ if(NOT TARGET libcoap::coap-3)
     set(ENABLE_OSCORE OFF CACHE INTERNAL "")
     set(ENABLE_SERVER_MODE OFF)
     set(ENABLE_SERVER_MODE OFF CACHE INTERNAL "")
+    set(ENABLE_PROXY_CODE OFF)
+    set(ENABLE_PROXY_CODE OFF  CACHE INTERNAL "")
     set(MAX_LOGGING_LEVEL "0")
     set(MAX_LOGGING_LEVEL "0" CACHE INTERNAL "")
     FetchContent_MakeAvailable(libcoap)

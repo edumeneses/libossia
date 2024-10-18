@@ -1,3 +1,5 @@
+target_link_libraries(ossia PUBLIC $<BUILD_INTERFACE:magic_enum::magic_enum>)
+
 if(TARGET Boost::boost)
   target_link_libraries(ossia PUBLIC $<BUILD_INTERFACE:Boost::boost>)
 elseif(TARGET boost)
@@ -16,7 +18,7 @@ int main(){ std::shared_mutex t; }
 )
 
 ### Protocol setup ###
-if(IOS OR CMAKE_SYSTEM_NAME MATCHES Emscripten)
+if(IOS OR EMSCRIPTEN)
   set(OSSIA_PROTOCOL_AUDIO TRUE CACHE INTERNAL "")
   set(OSSIA_PROTOCOL_MIDI TRUE CACHE INTERNAL "")
   set(OSSIA_PROTOCOL_HTTP FALSE CACHE INTERNAL "")
@@ -25,6 +27,7 @@ if(IOS OR CMAKE_SYSTEM_NAME MATCHES Emscripten)
   set(OSSIA_PROTOCOL_ARTNET FALSE CACHE INTERNAL "")
   set(OSSIA_PROTOCOL_MQTT5 FALSE CACHE INTERNAL "")
   set(OSSIA_PROTOCOL_COAP FALSE CACHE INTERNAL "")
+  set(OSSIA_PROTOCOL_MQTT5 FALSE CACHE INTERNAL "")
 endif()
 
 if(NOT OSSIA_QML)
